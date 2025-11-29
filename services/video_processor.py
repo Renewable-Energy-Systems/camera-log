@@ -1,0 +1,71 @@
+import os
+from pathlib import Path
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
+from moviepy import VideoFileClip, ImageClip, CompositeVideoClip
+
+def create_overlay_image(size, data):
+    """
+    Creates a transparent image with the text overlay.
+    data: tuple of (battery_code, battery_no, operator_name)
+    """
+    w, h = size
+    img = Image.new('RGBA', size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    
+    # Try to load a nice font, fallback to default
+    try:
+        font = ImageFont.truetype("arial.ttf", 24)
+        bold_font = ImageFont.truetype("arialbd.ttf", 24)
+    except IOError:
+        font = ImageFont.load_default()
+        bold_font = font
+
+    lines = [
+        f"Battery code : {data[0]}",
+        f"Battery Number : {data[1]}",
+        f"Operator Name : {data[2]}"
+    ]
+    
+    # Bottom left position
+    # 20px padding from bottom/left
+    line_height = 30
+    start_y = h - (len(lines) * line_height) - 20
+    x = 20
+    
+    for i, line in enumerate(lines):
+        y = start_y + (i * line_height)
+        
+        # Draw shadow
+        draw.text((x+2, y+2), line, font=bold_font, fill=(0, 0, 0, 200))
+        # Draw text
+        draw.text((x, y), line, font=bold_font, fill=(255, 255, 255, 255))
+        
+    return img
+
+def process_and_save_video(input_path: str, output_path: str, data: tuple, progress_callback=None):
+    """
+    Reads video from input_path, burns overlay text, saves to output_path.
+    data: (battery_code, battery_no, operator_name)
+    """
+    clip = VideoFileClip(input_path)
+    
+    # Create overlay image matching video size
+    overlay_img = create_overlay_image(clip.size, data)
+    
+    # Create ImageClip
+    # set duration to match video
+    overlay_clip = (ImageClip(np.array(overlay_img))
+                   .with_duration(clip.duration)
+                   .with_position(("left", "bottom"))) # Position is handled in image generation, but explicit pos is good too.
+    
+    # Composite
+    final = CompositeVideoClip([clip, overlay_clip])
+    
+    # Write
+    # Use 'libx264' for compatibility
+    # logger=None to suppress stdout noise, or 'bar'
+    final.write_videofile(output_path, codec='libx264', audio_codec='aac', logger='bar' if not progress_callback else None)
+    
+    clip.close()
+    final.close()

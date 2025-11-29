@@ -2,21 +2,26 @@
 from pathlib import Path
 from PySide6.QtCore import (
     Qt, QAbstractTableModel, QModelIndex, QSortFilterProxyModel, QUrl, QSize,
-    QTimer, QEvent, Signal
+    QTimer, QEvent, Signal, QThread
 )
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTableView, QComboBox, QLineEdit,
     QFrame, QPushButton, QStyle, QMessageBox, QSlider, QSizePolicy, QScrollArea,
-    QFileDialog, QGraphicsOpacityEffect
+    QFileDialog, QGraphicsOpacityEffect, QProgressDialog
 )
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtMultimediaWidgets import QVideoWidget
 from PySide6.QtGui import QKeySequence, QAction
+import threading
 
 from core.db import query
 from core.settings import get_snapshot_dir, set_snapshot_dir
 from models.recording import Recording
+from models.recording import Recording
 from services.media import snapshot_filename
+from services.video_processor import process_and_save_video
+
+
 
 
 # ---------------- Table model ----------------
@@ -77,6 +82,8 @@ class FullscreenWindow(QFrame):
         self.video = QVideoWidget(); lay.addWidget(self.video, 1)
         self.player.setVideoOutput(self.video)
 
+        # Info Overlay - removed from here, moved to __init__ to be sibling
+
         # Transparent overlay
         self.overlay = QFrame(self)
         self.overlay.setStyleSheet("background: rgba(0,0,0,0.35);")
@@ -111,6 +118,8 @@ class FullscreenWindow(QFrame):
         # Auto-hide
         self._hide_timer = QTimer(self); self._hide_timer.setInterval(self.HIDE_MS); self._hide_timer.timeout.connect(self._hide_overlay)
         self.installEventFilter(self); self.setMouseTracking(True)
+        
+        # Info Overlay - handled by layout
 
     def resizeEvent(self, e): self.overlay.resize(self.size()); super().resizeEvent(e)
     def showEvent(self, e): super().showEvent(e); self.player.play(); self._reveal_overlay()
@@ -199,7 +208,14 @@ class RecordListView(QFrame):
         self.lblSaveTo = QLabel(str(get_snapshot_dir() or "Default (app/snapshots)")); self.lblSaveTo.setStyleSheet("color:#475569;")
         row.addWidget(self.btnToggle); row.addWidget(self.btnStop); row.addSpacing(8)
         row.addWidget(self.tLeft); row.addWidget(self.seek,1); row.addWidget(self.tRight)
-        row.addStretch(1); row.addWidget(self.btnSnap); row.addWidget(self.btnFull); row.addWidget(self.btnSaveTo); row.addWidget(self.lblSaveTo)
+        self.btnSnap = QPushButton("Snapshot"); self.btnSnap.setProperty("class","outlined")
+        self.btnDownload = QPushButton("Download"); self.btnDownload.setProperty("class","outlined")
+        self.btnFull = QPushButton("Fullscreen"); self.btnFull.setProperty("class","outlined")
+        self.btnSaveTo = QPushButton("Save To…"); self.btnSaveTo.setProperty("class","outlined")
+        self.lblSaveTo = QLabel(str(get_snapshot_dir() or "Default (app/snapshots)")); self.lblSaveTo.setStyleSheet("color:#475569;")
+        row.addWidget(self.btnToggle); row.addWidget(self.btnStop); row.addSpacing(8)
+        row.addWidget(self.tLeft); row.addWidget(self.seek,1); row.addWidget(self.tRight)
+        row.addStretch(1); row.addWidget(self.btnSnap); row.addWidget(self.btnDownload); row.addWidget(self.btnFull); row.addWidget(self.btnSaveTo); row.addWidget(self.lblSaveTo)
         pv.addLayout(row); v.addWidget(playerCard)
 
         # Backend
@@ -219,6 +235,7 @@ class RecordListView(QFrame):
         self.seek.sliderReleased.connect(lambda: self.player.setPosition(self.seek.value()))
         self.btnFull.clicked.connect(self._open_fullscreen)
         self.btnSnap.clicked.connect(self._snapshot)
+        self.btnDownload.clicked.connect(self._download)
         self.btnSaveTo.clicked.connect(self._choose_snapshot_dir)
         # Double click opens fullscreen (no re-entrancy)
         self.videoWidget.mouseDoubleClickEvent = lambda e: (self._open_fullscreen(), e.accept())
@@ -246,6 +263,10 @@ class RecordListView(QFrame):
         self.model.refresh(search); self.table.resizeColumnsToContents()
         self.player.stop(); self.seek.setRange(0,0); self.tLeft.setText("00:00"); self.tRight.setText("00:00")
         self.current_path=None
+        self.info_overlay.hide()
+
+    def eventFilter(self, obj, event):
+        return super().eventFilter(obj, event)
 
     # ---- selection
     def _load_current(self, *_):
@@ -255,6 +276,7 @@ class RecordListView(QFrame):
         if not rec or not rec.video_path or not Path(rec.video_path).exists():
             QMessageBox.warning(self,"Missing","Video file not found on disk."); return
         self.current_path=Path(rec.video_path)
+        
         self.player.setSource(QUrl.fromLocalFile(str(self.current_path)))
         self.player.play()
 
@@ -286,6 +308,8 @@ class RecordListView(QFrame):
             return
         # create and show
         self.full = FullscreenWindow(self.player, self.videoWidget, on_exit=self._on_fullscreen_closed)
+        
+        # Pass data to fullscreen overlay
         self.full.showFullScreen()
 
     def _on_fullscreen_closed(self):
@@ -313,3 +337,26 @@ class RecordListView(QFrame):
         if d:
             set_snapshot_dir(Path(d))
             self.lblSaveTo.setText(d)
+
+    # ---- download
+    def _download(self):
+        if not self.current_path:
+            QMessageBox.information(self,"No video","Select and play a recording first."); return
+        
+        idx=self.table.currentIndex()
+        if not idx.isValid(): return
+        rec=self.model.recording_at(self.proxy.mapToSource(idx).row())
+        if not rec: return
+
+        # Ask for save location
+        default_name = f"{rec.project_no}_{rec.battery_no}_overlay.mp4"
+        out_path, _ = QFileDialog.getSaveFileName(self, "Save Video", str(Path.home() / default_name), "MP4 Video (*.mp4)")
+        if not out_path: return
+
+        # Just copy the file since it already has overlay
+        try:
+            import shutil
+            shutil.copy2(self.current_path, out_path)
+            QMessageBox.information(self, "Success", f"Video saved to:\n{out_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to save video:\n{e}")

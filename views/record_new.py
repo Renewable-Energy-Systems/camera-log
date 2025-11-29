@@ -1,10 +1,29 @@
 # views/record_new.py
 import datetime
 from pathlib import Path
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QFormLayout, QLineEdit, QTextEdit,
-                               QPushButton, QHBoxLayout, QFileDialog, QDateTimeEdit, QMessageBox, QFrame)
+                               QPushButton, QHBoxLayout, QFileDialog, QDateTimeEdit, QMessageBox, QFrame, QProgressDialog)
 from core.db import execute
+from core.paths import VIDEOS_DIR
 from services.media import copy_video_into_library
+from services.video_processor import process_and_save_video
+
+class VideoSaveWorker(QThread):
+    finished = Signal(bool, str)
+
+    def __init__(self, src, dst, data):
+        super().__init__()
+        self.src = src
+        self.dst = dst
+        self.data = data
+
+    def run(self):
+        try:
+            process_and_save_video(self.src, self.dst, self.data)
+            self.finished.emit(True, self.dst)
+        except Exception as e:
+            self.finished.emit(False, str(e))
 
 class RecordNewView(QFrame):
     def __init__(self, on_saved=None):
@@ -70,10 +89,33 @@ class RecordNewView(QFrame):
         if not src.exists():
             QMessageBox.critical(self, "Error", "Selected video file not found."); return
 
-        try:
-            dst = copy_video_into_library(src)
-        except Exception as e:
-            QMessageBox.critical(self, "Copy failed", f"Could not copy video:\n{e}"); return
+        # Define destination
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        dst = VIDEOS_DIR / f"{ts}_{src.name}"
+        
+        # Prepare data for overlay
+        data = (
+            self.projectNo.text().strip(),
+            self.batteryNo.text().strip(),
+            self.operatorName.text().strip()
+        )
+
+        # Progress Dialog
+        self.pd = QProgressDialog("Processing and saving video...", None, 0, 0, self)
+        self.pd.setWindowModality(Qt.WindowModal)
+        self.pd.setMinimumDuration(0)
+        self.pd.show()
+
+        # Worker
+        self.worker = VideoSaveWorker(str(src), str(dst), data)
+        self.worker.finished.connect(lambda s, m: self._on_save_finished(s, m, dst))
+        self.worker.start()
+
+    def _on_save_finished(self, success, msg, dst_path):
+        self.pd.close()
+        if not success:
+            QMessageBox.critical(self, "Error", f"Failed to process video:\n{msg}")
+            return
 
         values = (
             self.projectName.text().strip(),
@@ -83,7 +125,7 @@ class RecordNewView(QFrame):
             self.operatorName.text().strip(),
             self.dtEdit.dateTime().toString("yyyy-MM-dd HH:mm:ss"),
             self.remarks.toPlainText().strip(),
-            str(dst), None, datetime.datetime.now().isoformat(timespec='seconds')
+            str(dst_path), None, datetime.datetime.now().isoformat(timespec='seconds')
         )
         execute("""
             INSERT INTO recordings (project_name, project_no, log_id, battery_no, operator_name,

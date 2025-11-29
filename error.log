@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "D:\projects\camlog\tests\verify_overlay.py", line 25, in test_overlay
+    process_and_save_video(src, dst, data)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "D:\projects\camlog\services\video_processor.py", line 58, in process_and_save_video
+    overlay_clip = (ImageClip(np.array(overlay_img))
+                              ^^
+UnboundLocalError: cannot access local variable 'np' where it is not associated with a value
