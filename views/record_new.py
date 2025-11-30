@@ -1,11 +1,13 @@
 # views/record_new.py
 import datetime
 from pathlib import Path
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt, QThread, Signal, QSize
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QFormLayout, QLineEdit, QTextEdit,
-                               QPushButton, QHBoxLayout, QFileDialog, QDateTimeEdit, QMessageBox, QFrame, QProgressDialog)
+                               QPushButton, QHBoxLayout, QFileDialog, QDateTimeEdit, QMessageBox, 
+                               QFrame, QProgressDialog, QGridLayout, QScrollArea, QSizePolicy, QStyle)
+from PySide6.QtGui import QPixmap, QIcon
 from core.db import execute
-from core.paths import VIDEOS_DIR
+from core.paths import VIDEOS_DIR, ASSETS_DIR
 from services.media import copy_video_into_library
 from services.video_processor import process_and_save_video
 
@@ -28,45 +30,172 @@ class VideoSaveWorker(QThread):
 class RecordNewView(QFrame):
     def __init__(self, on_saved=None):
         super().__init__()
-        self.setObjectName("Card")
+        self.setObjectName("RecordNewView")
         self.on_saved = on_saved
-        v = QVBoxLayout(self); v.setContentsMargins(16,16,16,16)
-        title = QLabel("New Recording"); title.setStyleSheet("font-size:16px; font-weight:700;")
-        v.addWidget(title)
+        
+        # Main Layout
+        main_layout = QVBoxLayout(self); main_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Scroll Area
+        scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        
+        # Content Widget
+        content = QWidget()
+        content.setMaximumWidth(900)
+        self.layout = QVBoxLayout(content); self.layout.setSpacing(24); self.layout.setContentsMargins(24, 24, 24, 24)
+        
+        # 1. Header Section
+        self._setup_header()
+        
+        # 2. Project Details Card
+        self._setup_project_card()
+        
+        # 3. Session Details Card
+        self._setup_session_card()
+        
+        # 4. Media Card
+        self._setup_media_card()
+        
+        # 5. Remarks Card
+        self._setup_remarks_card()
+        
+        # 6. Actions
+        self._setup_actions()
+        
+        # Wrapper for centering
+        wrapper = QWidget()
+        wl = QHBoxLayout(wrapper); wl.setContentsMargins(0,0,0,0)
+        wl.addStretch(1); wl.addWidget(content); wl.addStretch(1)
+        
+        scroll.setWidget(wrapper)
+        main_layout.addWidget(scroll)
 
-        self.projectName = QLineEdit()
-        self.projectNo = QLineEdit()
-        self.logId = QLineEdit()
-        self.batteryNo = QLineEdit()
-        self.operatorName = QLineEdit()
+    def _setup_header(self):
+        # Image
+        header_img = QLabel()
+        pix = QPixmap(str(ASSETS_DIR / "recording_header.png"))
+        if not pix.isNull():
+            header_img.setPixmap(pix.scaledToWidth(900, Qt.SmoothTransformation))
+            header_img.setFixedHeight(200)
+            header_img.setScaledContents(True)
+            header_img.setStyleSheet("border-radius: 12px;")
+            self.layout.addWidget(header_img)
+        
+        # Title
+        title = QLabel("New Recording Entry")
+        title.setStyleSheet("font-size: 28px; font-weight: 800; color: #1B1B1F; margin-top: 8px;")
+        self.layout.addWidget(title)
+        
+        subtitle = QLabel("Fill in the details below to log a new stack assembly recording.")
+        subtitle.setStyleSheet("font-size: 14px; color: #5B5D72; margin-bottom: 8px;")
+        self.layout.addWidget(subtitle)
+
+    def _create_card(self, title):
+        card = QFrame(); card.setObjectName("Card")
+        l = QVBoxLayout(card); l.setContentsMargins(20, 20, 20, 20); l.setSpacing(16)
+        
+        lbl = QLabel(title)
+        lbl.setStyleSheet("font-size: 18px; font-weight: 700; color: #3448A3; margin-bottom: 8px;")
+        l.addWidget(lbl)
+        return card, l
+
+    def _setup_project_card(self):
+        card, l = self._create_card("Project Information")
+        grid = QGridLayout(); grid.setSpacing(16)
+        
+        self.projectName = QLineEdit(); self.projectName.setPlaceholderText("e.g. Solar Farm A")
+        self.projectNo = QLineEdit(); self.projectNo.setPlaceholderText("e.g. P-2025-001")
+        self.logId = QLineEdit(); self.logId.setPlaceholderText("e.g. L-105")
+        
+        self._add_field(grid, 0, 0, "Project Name", self.projectName)
+        self._add_field(grid, 0, 1, "Project No.", self.projectNo)
+        self._add_field(grid, 1, 0, "Log ID", self.logId)
+        
+        l.addLayout(grid)
+        self.layout.addWidget(card)
+
+    def _setup_session_card(self):
+        card, l = self._create_card("Session Details")
+        grid = QGridLayout(); grid.setSpacing(16)
+        
+        self.batteryNo = QLineEdit(); self.batteryNo.setPlaceholderText("e.g. B-12")
+        self.operatorName = QLineEdit(); self.operatorName.setPlaceholderText("e.g. John Doe")
         self.dtEdit = QDateTimeEdit(datetime.datetime.now()); self.dtEdit.setCalendarPopup(True)
         self.dtEdit.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
-        self.remarks = QTextEdit(); self.remarks.setFixedHeight(80)
+        
+        self._add_field(grid, 0, 0, "Battery No.", self.batteryNo)
+        self._add_field(grid, 0, 1, "Operator Name", self.operatorName)
+        self._add_field(grid, 1, 0, "Date & Time", self.dtEdit)
+        
+        l.addLayout(grid)
+        self.layout.addWidget(card)
+
+    def _setup_media_card(self):
+        card, l = self._create_card("Video Source")
+        
+        row = QHBoxLayout(); row.setSpacing(12)
+        
         self.videoPathEdit = QLineEdit(); self.videoPathEdit.setReadOnly(True)
-        self.browseBtn = QPushButton("Choose Video"); self.browseBtn.setProperty("class","outlined")
+        self.videoPathEdit.setPlaceholderText("No video selected...")
+        
+        self.browseBtn = QPushButton("Select Video File")
+        self.browseBtn.setProperty("class", "tonal")
+        self.browseBtn.setCursor(Qt.PointingHandCursor)
+        self.browseBtn.setIcon(self.style().standardIcon(QStyle.SP_DirIcon))
         self.browseBtn.clicked.connect(self._choose_video)
+        
+        row.addWidget(self.videoPathEdit, 1)
+        row.addWidget(self.browseBtn)
+        
+        l.addLayout(row)
+        
+        hint = QLabel("Supported formats: MP4, MOV, AVI, MKV")
+        hint.setStyleSheet("color: #767680; font-size: 12px; font-style: italic;")
+        l.addWidget(hint)
+        
+        self.layout.addWidget(card)
 
-        row = QHBoxLayout(); row.addWidget(self.videoPathEdit, 1); row.addWidget(self.browseBtn)
+    def _setup_remarks_card(self):
+        card, l = self._create_card("Additional Notes")
+        
+        self.remarks = QTextEdit()
+        self.remarks.setPlaceholderText("Enter any observations or issues encountered during assembly...")
+        self.remarks.setFixedHeight(100)
+        
+        l.addWidget(self.remarks)
+        self.layout.addWidget(card)
 
-        form = QFormLayout()
-        form.addRow("Project name", self.projectName)
-        form.addRow("Project No.", self.projectNo)
-        form.addRow("Log ID", self.logId)
-        form.addRow("Battery no.", self.batteryNo)
-        form.addRow("Operator name", self.operatorName)
-        form.addRow("Date & time", self.dtEdit)
-        form.addRow("Remarks", self.remarks)
-        container = QWidget(); container.setLayout(row)
-        form.addRow("Video upload", container)
-        v.addLayout(form)
-
-        actions = QHBoxLayout()
-        self.saveBtn = QPushButton("Save Entry"); self.saveBtn.setProperty("class","primary")
-        self.clearBtn = QPushButton("Clear"); self.clearBtn.setProperty("class","tonal")
-        self.saveBtn.clicked.connect(self._save)
+    def _setup_actions(self):
+        row = QHBoxLayout(); row.setSpacing(16)
+        row.addStretch(1)
+        
+        self.clearBtn = QPushButton("Clear Form")
+        self.clearBtn.setProperty("class", "text")
+        self.clearBtn.setCursor(Qt.PointingHandCursor)
         self.clearBtn.clicked.connect(self._clear)
-        actions.addWidget(self.saveBtn); actions.addWidget(self.clearBtn); actions.addStretch(1)
-        v.addLayout(actions)
+        
+        self.saveBtn = QPushButton("Save Recording")
+        self.saveBtn.setProperty("class", "primary")
+        self.saveBtn.setCursor(Qt.PointingHandCursor)
+        self.saveBtn.setMinimumWidth(150)
+        self.saveBtn.clicked.connect(self._save)
+        
+        row.addWidget(self.clearBtn)
+        row.addWidget(self.saveBtn)
+        
+        self.layout.addLayout(row)
+        self.layout.addStretch(1)
+
+    def _add_field(self, grid, row, col, label, widget):
+        l = QLabel(label)
+        l.setStyleSheet("font-weight: 600; color: #46464F; margin-bottom: 4px;")
+        
+        v = QVBoxLayout(); v.setSpacing(0); v.setContentsMargins(0,0,0,0)
+        v.addWidget(l)
+        v.addWidget(widget)
+        
+        grid.addLayout(v, row, col)
 
     def _choose_video(self):
         path, _ = QFileDialog.getOpenFileName(self, "Select Video", str(Path.home()),

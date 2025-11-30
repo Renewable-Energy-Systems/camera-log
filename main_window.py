@@ -25,23 +25,27 @@ class MainWindow(QMainWindow):
 
         # Left rail
         rail = QFrame(); rail.setObjectName("Card")
-        rl = QVBoxLayout(rail); rl.setContentsMargins(8,8,8,8); rl.setSpacing(8)
+        rail.setFixedWidth(250) # Fixed width for rail
+        rl = QVBoxLayout(rail); rl.setContentsMargins(12, 20, 12, 20); rl.setSpacing(8)
 
-        def nav_btn(text, primary=False):
+        def nav_btn(text, icon_name=None, idx=0):
             b = QPushButton(text); b.setObjectName("NavButton")
-            b.setProperty("class","primary" if primary else "tonal")
-            b.setMinimumWidth(150)
+            b.setCheckable(True)
+            b.setAutoExclusive(True)
+            b.clicked.connect(lambda: self._switch(idx))
             return b
 
-        self.btnDashboard = nav_btn("Dashboard", False)
-        self.btnNew = nav_btn("New Recording", True)
-        self.btnList = nav_btn("Recordings", False)
+        self.btnDashboard = nav_btn("Dashboard", idx=0)
+        self.btnNew = nav_btn("New Recording", idx=1)
+        self.btnList = nav_btn("Recordings", idx=2)
+        
+        # Set initial state
+        self.btnDashboard.setChecked(True)
 
-        self.btnDashboard.clicked.connect(lambda: self._switch(0))
-        self.btnNew.clicked.connect(lambda: self._switch(1))
-        self.btnList.clicked.connect(lambda: self._switch(2))
-
-        rl.addWidget(self.btnDashboard); rl.addWidget(self.btnNew); rl.addWidget(self.btnList); rl.addStretch(1)
+        rl.addWidget(self.btnDashboard)
+        rl.addWidget(self.btnNew)
+        rl.addWidget(self.btnList)
+        rl.addStretch(1)
 
         # Body
         body = QHBoxLayout(); body.setContentsMargins(12,8,12,12); body.setSpacing(12)
@@ -59,6 +63,12 @@ class MainWindow(QMainWindow):
 
     def _switch(self, idx: int):
         self.stack.setCurrentIndex(idx)
+        
+        # Update nav buttons state
+        self.btnDashboard.setChecked(idx == 0)
+        self.btnNew.setChecked(idx == 1)
+        self.btnList.setChecked(idx == 2)
+
         if idx == 0:
             self.stack.removeWidget(self.dashboard)
             self.dashboard = DashboardView()
