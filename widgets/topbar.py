@@ -6,13 +6,13 @@ from core.paths import ASSETS_DIR
 from core.style import COLORS
 
 class TopBar(QFrame):
-    def __init__(self, title_text: str = "RES • Stack Assembly Dashboard"):
+    def __init__(self, title_text: str = "Stack Assembly Dashboard"):
         super().__init__()
         self.setObjectName("Card")
         lay = QHBoxLayout(self); lay.setContentsMargins(16,10,16,10)
 
         logo = QLabel()
-        logo_path = ASSETS_DIR / "res_logo.png"
+        logo_path = ASSETS_DIR / "res_logo.webp"
         if logo_path.exists():
             pix = QPixmap(str(logo_path)).scaled(40, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             logo.setPixmap(pix)

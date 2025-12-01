@@ -239,7 +239,7 @@ class MainWindow(QMainWindow):
             logo.setPixmap(pix)
         else:
             logo.setText("RES")
-        title = QLabel("RES • Stack Assembly Dashboard")
+        title = QLabel("Stack Assembly Dashboard")
         title.setStyleSheet(f"font-size:20px; font-weight:800; color:{COLORS['primary']};")
 
         layout.addWidget(logo); layout.addSpacing(8); layout.addWidget(title); layout.addStretch(1)

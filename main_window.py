@@ -8,7 +8,7 @@ from views.record_list import RecordListView
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("RES – Stack Assembly Dashboard")
+        self.setWindowTitle("Stack Assembly Dashboard")
         self.setMinimumSize(1280, 800)
 
         self.topbar = TopBar()
