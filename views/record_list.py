@@ -7,7 +7,7 @@ from PySide6.QtCore import (
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTableView, QComboBox, QLineEdit,
     QFrame, QPushButton, QStyle, QMessageBox, QSlider, QSizePolicy, QScrollArea,
-    QFileDialog, QGraphicsOpacityEffect, QProgressDialog
+    QFileDialog, QGraphicsOpacityEffect, QProgressDialog, QHeaderView
 )
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtMultimediaWidgets import QVideoWidget
@@ -168,17 +168,14 @@ class FullscreenWindow(QFrame):
 class RecordListView(QFrame):
     def __init__(self):
         super().__init__(); self.setObjectName("Card")
-        outer = QVBoxLayout(self); outer.setContentsMargins(12,12,12,12); outer.setSpacing(0)
-
-        scroll = QScrollArea(); scroll.setWidgetResizable(True); outer.addWidget(scroll)
-        content = QWidget(); v = QVBoxLayout(content); v.setContentsMargins(0,0,0,0); v.setSpacing(12); scroll.setWidget(content)
+        outer = QVBoxLayout(self); outer.setContentsMargins(12,12,12,12); outer.setSpacing(12)
 
         # Filters
         top = QHBoxLayout()
         top.addWidget(QLabel("Quick Filter:"))
         self.field = QComboBox(); self.field.addItems(["All","Battery Name","Battery Code","Log ID","Battery no.","Operator"])
         self.filterEdit = QLineEdit(); self.filterEdit.setPlaceholderText("Type to filter…"); self.filterEdit.setClearButtonEnabled(True)
-        top.addWidget(self.field); top.addWidget(self.filterEdit,1); v.addLayout(top)
+        top.addWidget(self.field); top.addWidget(self.filterEdit,1); outer.addLayout(top)
 
         # Table
         self.model = RecordingTableModel()
@@ -187,13 +184,30 @@ class RecordListView(QFrame):
         self.table = QTableView(); self.table.setModel(self.proxy)
         self.table.setSortingEnabled(True); self.table.setSelectionBehavior(QTableView.SelectRows)
         self.table.setSelectionMode(QTableView.SingleSelection)
-        self.table.verticalHeader().setVisible(False); self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.setMinimumHeight(220); v.addWidget(self.table)
+        self.table.verticalHeader().setVisible(False); self.table.horizontalHeader().setStretchLastSection(False)
+        self.table.setMinimumHeight(220); outer.addWidget(self.table)
+
+        # Optimize columns
+        h = self.table.horizontalHeader()
+        # Hide ID(0), Video(8), Duration(9)
+        self.table.setColumnHidden(0, True)
+        self.table.setColumnHidden(8, True)
+        self.table.setColumnHidden(9, True)
+        
+        # Resize modes
+        # 1=BatName, 2=BatCode, 3=LogID, 4=BatNo, 5=Op, 6=Date
+        for c in (1,2,3,4,5,6):
+            h.setSectionResizeMode(c, QHeaderView.ResizeToContents)
+        
+        # 7=Remarks (Stretch)
+        h.setSectionResizeMode(7, QHeaderView.Stretch)
 
         # Embedded player
         playerCard = QFrame(); playerCard.setObjectName("Card")
+        playerCard.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         pv = QVBoxLayout(playerCard); pv.setContentsMargins(12,12,12,12); pv.setSpacing(8)
-        self.videoWidget = QVideoWidget(); self.videoWidget.setMinimumHeight(320); self.videoWidget.setMaximumHeight(480)
+        self.videoWidget = QVideoWidget()
+        self.videoWidget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         pv.addWidget(self.videoWidget)
 
         row = QHBoxLayout()
@@ -202,21 +216,41 @@ class RecordListView(QFrame):
         self.btnStop = QPushButton(self.style().standardIcon(QStyle.SP_MediaStop), ""); self.btnStop.setFixedSize(QSize(36,32)); self.btnStop.setProperty("class","tonal")
         self.seek = QSlider(Qt.Horizontal); self.seek.setRange(0,0)
         self.tLeft = QLabel("00:00"); self.tRight = QLabel("00:00")
-        self.btnSnap = QPushButton("Snapshot"); self.btnSnap.setProperty("class","outlined")
-        self.btnFull = QPushButton("Fullscreen"); self.btnFull.setProperty("class","outlined")
-        self.btnSaveTo = QPushButton("Save To…"); self.btnSaveTo.setProperty("class","outlined")
-        self.lblSaveTo = QLabel(str(get_snapshot_dir() or "Default (app/snapshots)")); self.lblSaveTo.setStyleSheet("color:#475569;")
+
+
         row.addWidget(self.btnToggle); row.addWidget(self.btnStop); row.addSpacing(8)
         row.addWidget(self.tLeft); row.addWidget(self.seek,1); row.addWidget(self.tRight)
-        self.btnSnap = QPushButton("Snapshot"); self.btnSnap.setProperty("class","outlined")
-        self.btnDownload = QPushButton("Download"); self.btnDownload.setProperty("class","outlined")
-        self.btnFull = QPushButton("Fullscreen"); self.btnFull.setProperty("class","outlined")
-        self.btnSaveTo = QPushButton("Save To…"); self.btnSaveTo.setProperty("class","outlined")
-        self.lblSaveTo = QLabel(str(get_snapshot_dir() or "Default (app/snapshots)")); self.lblSaveTo.setStyleSheet("color:#475569;")
-        row.addWidget(self.btnToggle); row.addWidget(self.btnStop); row.addSpacing(8)
-        row.addWidget(self.tLeft); row.addWidget(self.seek,1); row.addWidget(self.tRight)
-        row.addStretch(1); row.addWidget(self.btnSnap); row.addWidget(self.btnDownload); row.addWidget(self.btnFull); row.addWidget(self.btnSaveTo); row.addWidget(self.lblSaveTo)
-        pv.addLayout(row); v.addWidget(playerCard)
+        
+        # Controls
+        self.btnSnap = QPushButton("Snapshot")
+        self.btnSnap.setProperty("class","primary")
+        self.btnSnap.setCursor(Qt.PointingHandCursor)
+        
+        self.btnDownload = QPushButton()
+        self.btnDownload.setIcon(self.style().standardIcon(QStyle.SP_DialogSaveButton))
+        self.btnDownload.setToolTip("Save Video As...")
+        self.btnDownload.setProperty("class","tonal")
+        self.btnDownload.setCursor(Qt.PointingHandCursor)
+        
+        self.btnFull = QPushButton()
+        self.btnFull.setIcon(self.style().standardIcon(QStyle.SP_TitleBarMaxButton))
+        self.btnFull.setToolTip("Fullscreen")
+        self.btnFull.setProperty("class","tonal")
+        self.btnFull.setCursor(Qt.PointingHandCursor)
+        
+        self.btnSaveTo = QPushButton()
+        self.btnSaveTo.setIcon(self.style().standardIcon(QStyle.SP_DirIcon))
+        self.btnSaveTo.setToolTip(f"Set Snapshot Folder\nCurrent: {get_snapshot_dir() or 'Default'}")
+        self.btnSaveTo.setProperty("class","tonal")
+        self.btnSaveTo.setCursor(Qt.PointingHandCursor)
+
+        row.addStretch(1)
+        row.addWidget(self.btnSnap)
+        row.addWidget(self.btnDownload)
+        row.addWidget(self.btnFull)
+        row.addWidget(self.btnSaveTo)
+        
+        pv.addLayout(row); outer.addWidget(playerCard, 1)
 
         # Backend
         self.player = QMediaPlayer(); self.audio = QAudioOutput(); self.audio.setVolume(0.8)
@@ -336,7 +370,7 @@ class RecordListView(QFrame):
         d = QFileDialog.getExistingDirectory(self, "Choose snapshot folder", str(start))
         if d:
             set_snapshot_dir(Path(d))
-            self.lblSaveTo.setText(d)
+            self.btnSaveTo.setToolTip(f"Set Snapshot Folder\nCurrent: {d}")
 
     # ---- download
     def _download(self):
