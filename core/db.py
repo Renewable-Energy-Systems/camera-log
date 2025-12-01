@@ -11,8 +11,8 @@ def init_db():
         con.execute("""
             CREATE TABLE IF NOT EXISTS recordings(
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                project_name TEXT,
-                project_no TEXT,
+                battery_name TEXT,
+                battery_code TEXT,
                 log_id TEXT,
                 battery_no TEXT,
                 operator_name TEXT,

@@ -113,8 +113,8 @@ def init_db():
         con.execute("""
             CREATE TABLE IF NOT EXISTS recordings (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                project_name TEXT,
-                project_no TEXT,
+                battery_name TEXT,
+                battery_code TEXT,
                 log_id TEXT,
                 battery_no TEXT,
                 operator_name TEXT,
@@ -130,8 +130,8 @@ def init_db():
 @dataclass
 class Recording:
     id: int
-    project_name: str
-    project_no: str
+    battery_name: str
+    battery_code: str
     log_id: str
     battery_no: str
     operator_name: str
@@ -142,7 +142,7 @@ class Recording:
     created_at: str
 
 class RecordingTableModel(QAbstractTableModel):
-    HEADERS = ["ID", "Project", "Project No.", "Log ID", "Battery No.",
+    HEADERS = ["ID", "Battery Name", "Battery Code", "Log ID", "Battery No.",
                "Operator", "Date/Time", "Remarks", "Video", "Duration (s)"]
 
     def __init__(self):
@@ -158,17 +158,17 @@ class RecordingTableModel(QAbstractTableModel):
             if search:
                 s = f"%{search.lower()}%"
                 cur.execute("""
-                    SELECT id, project_name, project_no, log_id, battery_no, operator_name,
+                    SELECT id, battery_name, battery_code, log_id, battery_no, operator_name,
                            datetime, remarks, video_path, duration_ms, created_at
                     FROM recordings
-                    WHERE lower(project_name) LIKE ? OR lower(project_no) LIKE ?
+                    WHERE lower(battery_name) LIKE ? OR lower(battery_code) LIKE ?
                           OR lower(log_id) LIKE ? OR lower(battery_no) LIKE ?
                           OR lower(operator_name) LIKE ? OR lower(remarks) LIKE ?
                     ORDER BY datetime(created_at) DESC
                 """, (s,s,s,s,s,s))
             else:
                 cur.execute("""
-                    SELECT id, project_name, project_no, log_id, battery_no, operator_name,
+                    SELECT id, battery_name, battery_code, log_id, battery_no, operator_name,
                            datetime, remarks, video_path, duration_ms, created_at
                     FROM recordings
                     ORDER BY datetime(created_at) DESC
@@ -186,7 +186,7 @@ class RecordingTableModel(QAbstractTableModel):
         c = index.column()
         if role in (Qt.DisplayRole, Qt.EditRole):
             mapping = [
-                r.id, r.project_name, r.project_no, r.log_id, r.battery_no,
+                r.id, r.battery_name, r.battery_code, r.log_id, r.battery_no,
                 r.operator_name, r.datetime, r.remarks,
                 Path(r.video_path).name if r.video_path else "",
                 f"{(r.duration_ms or 0)/1000:.1f}",
@@ -260,8 +260,8 @@ class MainWindow(QMainWindow):
         lay.addWidget(h)
 
         form = QFormLayout(); form.setLabelAlignment(Qt.AlignLeft); form.setFormAlignment(Qt.AlignTop)
-        self.projectName = QLineEdit()
-        self.projectNo = QLineEdit()
+        self.batteryName = QLineEdit()
+        self.batteryCode = QLineEdit()
         self.logId = QLineEdit()
         self.batteryNo = QLineEdit()
         self.operatorName = QLineEdit()
@@ -273,8 +273,8 @@ class MainWindow(QMainWindow):
 
         row = QHBoxLayout(); row.addWidget(self.videoPathEdit, 1); row.addWidget(self.browseBtn)
 
-        form.addRow("Project name", self.projectName)
-        form.addRow("Project No.", self.projectNo)
+        form.addRow("Battery Name", self.batteryName)
+        form.addRow("Battery Code", self.batteryCode)
         form.addRow("Log ID", self.logId)
         form.addRow("Battery no.", self.batteryNo)
         form.addRow("Operator name", self.operatorName)
@@ -314,7 +314,7 @@ class MainWindow(QMainWindow):
         quick = QHBoxLayout()
         quick.addWidget(QLabel("Quick Filter:"))
         self.filterField = QComboBox()
-        self.filterField.addItems(["All", "Project", "Project No.", "Log ID", "Battery no.", "Operator"])
+        self.filterField.addItems(["All", "Battery Name", "Battery Code", "Log ID", "Battery no.", "Operator"])
         self.filterEdit = QLineEdit()
         self.filterEdit.setPlaceholderText("Type to filter…")
         self.filterEdit.setClearButtonEnabled(True)
@@ -365,8 +365,8 @@ class MainWindow(QMainWindow):
         if path: self.videoPathEdit.setText(path)
 
     def _save_entry(self):
-        if not self.projectName.text().strip():
-            QMessageBox.warning(self, "Missing", "Project name is required."); return
+        if not self.batteryName.text().strip():
+            QMessageBox.warning(self, "Missing", "Battery name is required."); return
         if not self.videoPathEdit.text().strip():
             QMessageBox.warning(self, "Missing", "Please choose a video file."); return
 
@@ -383,8 +383,8 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Copy failed", f"Could not copy video:\n{e}"); return
 
         values = (
-            self.projectName.text().strip(),
-            self.projectNo.text().strip(),
+            self.batteryName.text().strip(),
+            self.batteryCode.text().strip(),
             self.logId.text().strip(),
             self.batteryNo.text().strip(),
             self.operatorName.text().strip(),
@@ -394,7 +394,7 @@ class MainWindow(QMainWindow):
         )
         with sqlite3.connect(DB_PATH) as con:
             con.execute("""
-                INSERT INTO recordings (project_name, project_no, log_id, battery_no, operator_name,
+                INSERT INTO recordings (battery_name, battery_code, log_id, battery_no, operator_name,
                                         datetime, remarks, video_path, duration_ms, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, values)
@@ -405,7 +405,7 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "Saved", "Recording saved successfully.")
 
     def _clear_form(self, keep_datetime=False):
-        self.projectName.clear(); self.projectNo.clear(); self.logId.clear()
+        self.batteryName.clear(); self.batteryCode.clear(); self.logId.clear()
         self.batteryNo.clear(); self.operatorName.clear()
         if not keep_datetime:
             self.dtEdit.setDateTime(datetime.datetime.now())
@@ -413,7 +413,7 @@ class MainWindow(QMainWindow):
 
     def _apply_field_filter(self, text: str):
         map_col = {
-            "All": -1, "Project": 1, "Project No.": 2, "Log ID": 3,
+            "All": -1, "Battery Name": 1, "Battery Code": 2, "Log ID": 3,
             "Battery no.": 4, "Operator": 5
         }
         col = map_col.get(self.filterField.currentText(), -1)

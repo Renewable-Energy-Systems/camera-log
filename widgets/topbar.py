@@ -23,7 +23,7 @@ class TopBar(QFrame):
         title.setStyleSheet(f"font-size:20px; font-weight:800; color:{COLORS['primary']};")
 
         self.searchEdit = QLineEdit()
-        self.searchEdit.setPlaceholderText("Global search… (projects, operators, remarks)")
+        self.searchEdit.setPlaceholderText("Global search… (battery name, code, operators, remarks)")
         self.searchEdit.setClearButtonEnabled(True)
         self.searchEdit.setFixedWidth(420)
 

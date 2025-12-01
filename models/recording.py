@@ -4,8 +4,8 @@ from dataclasses import dataclass
 @dataclass
 class Recording:
     id: int
-    project_name: str
-    project_no: str
+    battery_name: str
+    battery_code: str
     log_id: str
     battery_no: str
     operator_name: str

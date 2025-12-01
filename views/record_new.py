@@ -48,8 +48,8 @@ class RecordNewView(QFrame):
         # 1. Header Section
         self._setup_header()
         
-        # 2. Project Details Card
-        self._setup_project_card()
+        # 2. Battery Details Card
+        self._setup_battery_card()
         
         # 3. Session Details Card
         self._setup_session_card()
@@ -100,16 +100,16 @@ class RecordNewView(QFrame):
         l.addWidget(lbl)
         return card, l
 
-    def _setup_project_card(self):
-        card, l = self._create_card("Project Information")
+    def _setup_battery_card(self):
+        card, l = self._create_card("Battery Information")
         grid = QGridLayout(); grid.setSpacing(16)
         
-        self.projectName = QLineEdit(); self.projectName.setPlaceholderText("e.g. Solar Farm A")
-        self.projectNo = QLineEdit(); self.projectNo.setPlaceholderText("e.g. P-2025-001")
+        self.batteryName = QLineEdit(); self.batteryName.setPlaceholderText("e.g. Solar Farm A")
+        self.batteryCode = QLineEdit(); self.batteryCode.setPlaceholderText("e.g. P-2025-001")
         self.logId = QLineEdit(); self.logId.setPlaceholderText("e.g. L-105")
         
-        self._add_field(grid, 0, 0, "Project Name", self.projectName)
-        self._add_field(grid, 0, 1, "Project No.", self.projectNo)
+        self._add_field(grid, 0, 0, "Battery Name", self.batteryName)
+        self._add_field(grid, 0, 1, "Battery Code", self.batteryCode)
         self._add_field(grid, 1, 0, "Log ID", self.logId)
         
         l.addLayout(grid)
@@ -203,14 +203,14 @@ class RecordNewView(QFrame):
         if path: self.videoPathEdit.setText(path)
 
     def _clear(self):
-        self.projectName.clear(); self.projectNo.clear(); self.logId.clear()
+        self.batteryName.clear(); self.batteryCode.clear(); self.logId.clear()
         self.batteryNo.clear(); self.operatorName.clear(); self.remarks.clear()
         self.videoPathEdit.clear()
         self.dtEdit.setDateTime(datetime.datetime.now())
 
     def _save(self):
-        if not self.projectName.text().strip():
-            QMessageBox.warning(self, "Missing", "Project name is required."); return
+        if not self.batteryName.text().strip():
+            QMessageBox.warning(self, "Missing", "Battery name is required."); return
         if not self.videoPathEdit.text().strip():
             QMessageBox.warning(self, "Missing", "Please choose a video file."); return
 
@@ -224,7 +224,7 @@ class RecordNewView(QFrame):
         
         # Prepare data for overlay
         data = (
-            self.projectNo.text().strip(),
+            self.batteryCode.text().strip(),
             self.batteryNo.text().strip(),
             self.operatorName.text().strip()
         )
@@ -247,8 +247,8 @@ class RecordNewView(QFrame):
             return
 
         values = (
-            self.projectName.text().strip(),
-            self.projectNo.text().strip(),
+            self.batteryName.text().strip(),
+            self.batteryCode.text().strip(),
             self.logId.text().strip(),
             self.batteryNo.text().strip(),
             self.operatorName.text().strip(),
@@ -257,7 +257,7 @@ class RecordNewView(QFrame):
             str(dst_path), None, datetime.datetime.now().isoformat(timespec='seconds')
         )
         execute("""
-            INSERT INTO recordings (project_name, project_no, log_id, battery_no, operator_name,
+            INSERT INTO recordings (battery_name, battery_code, log_id, battery_no, operator_name,
                                     datetime, remarks, video_path, duration_ms, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, values)

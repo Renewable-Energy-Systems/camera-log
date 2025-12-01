@@ -26,24 +26,24 @@ from services.video_processor import process_and_save_video
 
 # ---------------- Table model ----------------
 class RecordingTableModel(QAbstractTableModel):
-    HEADERS = ["ID","Project","Project No.","Log ID","Battery No.","Operator","Date/Time","Remarks","Video","Duration (s)"]
+    HEADERS = ["ID","Battery Name","Battery Code","Log ID","Battery No.","Operator","Date/Time","Remarks","Video","Duration (s)"]
     def __init__(self): super().__init__(); self.rows:list[Recording]=[]; self.refresh()
     def refresh(self, text: str = ""):
         self.beginResetModel(); self.rows.clear()
         if text:
             t=f"%{text.lower()}%"
             rows = query("""
-                SELECT id,project_name,project_no,log_id,battery_no,operator_name,
+                SELECT id,battery_name,battery_code,log_id,battery_no,operator_name,
                        datetime,remarks,video_path,duration_ms,created_at
                 FROM recordings
-                WHERE lower(project_name) LIKE ? OR lower(project_no) LIKE ?
+                WHERE lower(battery_name) LIKE ? OR lower(battery_code) LIKE ?
                    OR lower(log_id) LIKE ? OR lower(battery_no) LIKE ?
                    OR lower(operator_name) LIKE ? OR lower(remarks) LIKE ?
                 ORDER BY datetime(created_at) DESC
             """, (t,t,t,t,t,t))
         else:
             rows = query("""
-                SELECT id,project_name,project_no,log_id,battery_no,operator_name,
+                SELECT id,battery_name,battery_code,log_id,battery_no,operator_name,
                        datetime,remarks,video_path,duration_ms,created_at
                 FROM recordings ORDER BY datetime(created_at) DESC
             """)
@@ -55,7 +55,7 @@ class RecordingTableModel(QAbstractTableModel):
         if not idx.isValid(): return None
         r=self.rows[idx.row()]; c=idx.column()
         if role in (Qt.DisplayRole, Qt.EditRole):
-            m=[r.id,r.project_name,r.project_no,r.log_id,r.battery_no,r.operator_name,
+            m=[r.id,r.battery_name,r.battery_code,r.log_id,r.battery_no,r.operator_name,
                r.datetime,r.remarks,Path(r.video_path).name if r.video_path else "",
                f"{(r.duration_ms or 0)/1000:.1f}"]
             return m[c]
@@ -176,7 +176,7 @@ class RecordListView(QFrame):
         # Filters
         top = QHBoxLayout()
         top.addWidget(QLabel("Quick Filter:"))
-        self.field = QComboBox(); self.field.addItems(["All","Project","Project No.","Log ID","Battery no.","Operator"])
+        self.field = QComboBox(); self.field.addItems(["All","Battery Name","Battery Code","Log ID","Battery no.","Operator"])
         self.filterEdit = QLineEdit(); self.filterEdit.setPlaceholderText("Type to filter…"); self.filterEdit.setClearButtonEnabled(True)
         top.addWidget(self.field); top.addWidget(self.filterEdit,1); v.addLayout(top)
 
@@ -255,7 +255,7 @@ class RecordListView(QFrame):
 
     # ---- filtering
     def _apply_filter(self, text: str):
-        mapping={"All":-1,"Project":1,"Project No.":2,"Log ID":3,"Battery no.":4,"Operator":5}
+        mapping={"All":-1,"Battery Name":1,"Battery Code":2,"Log ID":3,"Battery no.":4,"Operator":5}
         self.proxy.setFilterKeyColumn(mapping.get(self.field.currentText(), -1))
         self.proxy.setFilterFixedString(text)
 
@@ -349,7 +349,7 @@ class RecordListView(QFrame):
         if not rec: return
 
         # Ask for save location
-        default_name = f"{rec.project_no}_{rec.battery_no}_overlay.mp4"
+        default_name = f"{rec.battery_code}_{rec.battery_no}_overlay.mp4"
         out_path, _ = QFileDialog.getSaveFileName(self, "Save Video", str(Path.home() / default_name), "MP4 Video (*.mp4)")
         if not out_path: return
 
