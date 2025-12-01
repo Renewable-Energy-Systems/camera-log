@@ -165,6 +165,17 @@ def material_stylesheet() -> str:
         selection-background-color: {c['primaryContainer']};
         selection-color: {c['onPrimaryContainer']};
     }}
+    QTableView::item:selected {{
+        background-color: {c['primaryContainer']};
+        color: {c['onPrimaryContainer']};
+        border-bottom: 2px solid {c['primary']}; /* Add a bottom border to highlight */
+    }}
+    QTableView::item:hover {{
+        background-color: {c['surfaceVariant']}; /* Hover effect */
+    }}
+    QTableView::item:selected:hover {{
+        background-color: {c['primaryContainer']}; /* Keep selection color on hover */
+    }}
     QHeaderView::section {{
         background-color: {c['surface']};
         color: {c['onSurfaceVariant']};
