@@ -19,7 +19,10 @@ from core.settings import get_snapshot_dir, set_snapshot_dir
 from models.recording import Recording
 from models.recording import Recording
 from services.media import snapshot_filename
+from services.media import snapshot_filename
 from services.video_processor import process_and_save_video
+from views.edit_dialog import EditRecordingDialog
+from core.db import execute
 
 
 
@@ -244,11 +247,29 @@ class RecordListView(QFrame):
         self.btnSaveTo.setProperty("class","tonal")
         self.btnSaveTo.setCursor(Qt.PointingHandCursor)
 
+        # Edit/Delete
+        self.btnEdit = QPushButton()
+        self.btnEdit.setIcon(self.style().standardIcon(QStyle.SP_FileDialogDetailedView))
+        self.btnEdit.setToolTip("Edit Details / Re-upload Video")
+        self.btnEdit.setProperty("class","tonal")
+        self.btnEdit.setCursor(Qt.PointingHandCursor)
+
+        self.btnDelete = QPushButton()
+        self.btnDelete.setIcon(self.style().standardIcon(QStyle.SP_TrashIcon))
+        self.btnDelete.setToolTip("Delete Recording")
+        self.btnDelete.setProperty("class","tonal")
+        self.btnDelete.setCursor(Qt.PointingHandCursor)
+        # Red hover effect for delete
+        self.btnDelete.setStyleSheet("QPushButton:hover { background-color: #fee2e2; color: #b91c1c; }")
+
         row.addStretch(1)
         row.addWidget(self.btnSnap)
         row.addWidget(self.btnDownload)
         row.addWidget(self.btnFull)
         row.addWidget(self.btnSaveTo)
+        row.addSpacing(8)
+        row.addWidget(self.btnEdit)
+        row.addWidget(self.btnDelete)
         
         pv.addLayout(row); outer.addWidget(playerCard, 1)
 
@@ -271,6 +292,8 @@ class RecordListView(QFrame):
         self.btnSnap.clicked.connect(self._snapshot)
         self.btnDownload.clicked.connect(self._download)
         self.btnSaveTo.clicked.connect(self._choose_snapshot_dir)
+        self.btnEdit.clicked.connect(self._edit_recording)
+        self.btnDelete.clicked.connect(self._delete_recording)
         # Double click opens fullscreen (no re-entrancy)
         self.videoWidget.mouseDoubleClickEvent = lambda e: (self._open_fullscreen(), e.accept())
 
@@ -297,7 +320,7 @@ class RecordListView(QFrame):
         self.model.refresh(search); self.table.resizeColumnsToContents()
         self.player.stop(); self.seek.setRange(0,0); self.tLeft.setText("00:00"); self.tRight.setText("00:00")
         self.current_path=None
-        self.info_overlay.hide()
+        self.current_path=None
 
     def eventFilter(self, obj, event):
         return super().eventFilter(obj, event)
@@ -394,3 +417,37 @@ class RecordListView(QFrame):
             QMessageBox.information(self, "Success", f"Video saved to:\n{out_path}")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save video:\n{e}")
+
+    # ---- edit / delete
+    def _get_current_recording(self) -> Recording | None:
+        idx = self.table.currentIndex()
+        if not idx.isValid(): return None
+        return self.model.recording_at(self.proxy.mapToSource(idx).row())
+
+    def _edit_recording(self):
+        rec = self._get_current_recording()
+        if not rec: QMessageBox.information(self, "Select", "Please select a recording to edit."); return
+        
+        dlg = EditRecordingDialog(self, rec)
+        if dlg.exec():
+            self.refresh(self.filterEdit.text())
+            # Restore selection if possible? For now just refresh is enough
+            QMessageBox.information(self, "Updated", "Recording updated successfully.")
+
+    def _delete_recording(self):
+        rec = self._get_current_recording()
+        if not rec: QMessageBox.information(self, "Select", "Please select a recording to delete."); return
+
+        res = QMessageBox.question(self, "Confirm Delete", 
+                                   f"Are you sure you want to delete recording:\n{rec.battery_code} ({rec.datetime})?\n\nThis cannot be undone.",
+                                   QMessageBox.Yes | QMessageBox.No)
+        if res == QMessageBox.Yes:
+            try:
+                execute("DELETE FROM recordings WHERE id=?", (rec.id,))
+                # Optional: Delete video file? 
+                # For safety, maybe just keep the file or ask user. 
+                # Let's just delete the record for now to avoid data loss accidents.
+                self.refresh(self.filterEdit.text())
+                QMessageBox.information(self, "Deleted", "Recording deleted.")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to delete: {e}")

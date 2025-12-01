@@ -14,3 +14,4 @@ class Recording:
     video_path: str
     duration_ms: int | None
     created_at: str
+    updated_at: str | None = None
