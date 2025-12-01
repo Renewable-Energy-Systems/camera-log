@@ -70,10 +70,7 @@ class MainWindow(QMainWindow):
         self.btnList.setChecked(idx == 2)
 
         if idx == 0:
-            self.stack.removeWidget(self.dashboard)
-            self.dashboard = DashboardView()
-            self.stack.insertWidget(0, self.dashboard)
-            self.stack.setCurrentIndex(0)
+            self.dashboard.refresh()
         elif idx == 2:
             self.recordList.refresh()
 
