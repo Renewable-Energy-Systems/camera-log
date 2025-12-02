@@ -1,10 +1,10 @@
 # core/db.py
 import sqlite3
 from typing import Iterable, Any
-from .paths import DB_PATH
+from . import paths
 
 def get_conn():
-    return sqlite3.connect(DB_PATH)
+    return sqlite3.connect(paths.get_db_path())
 
 def init_db():
     with get_conn() as con:

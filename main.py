@@ -32,13 +32,12 @@ from PySide6.QtWidgets import (
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink
 from PySide6.QtMultimediaWidgets import QVideoWidget
 
+import core.config_manager as config_manager
+import core.paths as paths
+import core.db
+
 APP_DIR = Path(__file__).resolve().parent
-DB_PATH = APP_DIR / "res_stack_recorder.db"
-VIDEOS_DIR = APP_DIR / "videos"
-SNAP_DIR = APP_DIR / "snapshots"
-ASSETS_DIR = APP_DIR / "assets"
-for d in (VIDEOS_DIR, SNAP_DIR, ASSETS_DIR):
-    d.mkdir(parents=True, exist_ok=True)
+ASSETS_DIR = paths.ASSETS_DIR
 
 # ---------- COLORS (Material 3-ish, RES brand) ----------
 COLORS = {
@@ -108,24 +107,8 @@ def material_stylesheet():
     """
 
 # ---------- DB ----------
-def init_db():
-    with sqlite3.connect(DB_PATH) as con:
-        con.execute("""
-            CREATE TABLE IF NOT EXISTS recordings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                battery_name TEXT,
-                battery_code TEXT,
-                log_id TEXT,
-                battery_no TEXT,
-                operator_name TEXT,
-                datetime TEXT,
-                remarks TEXT,
-                video_path TEXT,
-                duration_ms INTEGER DEFAULT NULL,
-                created_at TEXT
-            )
-        """)
-        con.commit()
+# ---------- DB ----------
+# init_db is now handled by core.db
 
 @dataclass
 class Recording:
@@ -153,7 +136,7 @@ class RecordingTableModel(QAbstractTableModel):
     def refresh(self, search: str = ""):
         self.beginResetModel()
         self.rows.clear()
-        with sqlite3.connect(DB_PATH) as con:
+        with sqlite3.connect(paths.get_db_path()) as con:
             cur = con.cursor()
             if search:
                 s = f"%{search.lower()}%"
@@ -376,7 +359,7 @@ class MainWindow(QMainWindow):
 
         # copy into ./videos with a unique name
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        dst = VIDEOS_DIR / f"{ts}_{src.name}"
+        dst = paths.get_videos_dir() / f"{ts}_{src.name}"
         try:
             shutil.copy2(src, dst)
         except Exception as e:
@@ -392,7 +375,7 @@ class MainWindow(QMainWindow):
             self.remarks.toPlainText().strip(),
             str(dst), None, datetime.datetime.now().isoformat(timespec='seconds')
         )
-        with sqlite3.connect(DB_PATH) as con:
+        with sqlite3.connect(paths.get_db_path()) as con:
             con.execute("""
                 INSERT INTO recordings (battery_name, battery_code, log_id, battery_no, operator_name,
                                         datetime, remarks, video_path, duration_ms, created_at)
@@ -442,17 +425,47 @@ class MainWindow(QMainWindow):
         if image.isNull():
             QMessageBox.critical(self, "Error", "Could not read current frame."); return
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         stem = self.currentVideoPath.stem if self.currentVideoPath else "snapshot"
-        out = SNAP_DIR / f"{stem}_{ts}.png"
+        out = paths.get_snap_dir() / f"{stem}_{ts}.png"
         if image.save(str(out)):
             QMessageBox.information(self, "Saved", f"Snapshot saved to:\n{out}")
         else:
             QMessageBox.critical(self, "Error", "Failed to save snapshot.")
 
 def main():
-    init_db()
     app = QApplication(sys.argv)
     app.setApplicationName("RES – Stack Assembly Dashboard")
+
+    # 1. Check/Set Data Path
+    if not config_manager.get_data_path():
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Information)
+        msg.setWindowTitle("Setup")
+        msg.setText("Please select a folder to store data (videos, database).")
+        msg.exec()
+        
+        path = QFileDialog.getExistingDirectory(None, "Select Data Folder")
+        if path:
+            config_manager.set_data_path(path)
+        else:
+            # Default to AppData if cancelled
+            default_path = config_manager.get_app_data_dir() / "data"
+            reply = QMessageBox.question(None, "Default Path", 
+                f"No path selected. Use default location?\n{default_path}",
+                QMessageBox.Yes | QMessageBox.No)
+            if reply == QMessageBox.Yes:
+                config_manager.set_data_path(default_path)
+            else:
+                sys.exit(0)
+
+    # 2. Ensure directories
+    paths.get_videos_dir().mkdir(parents=True, exist_ok=True)
+    paths.get_snap_dir().mkdir(parents=True, exist_ok=True)
+
+    # 3. Init DB
+    core.db.init_db()
+
     win = MainWindow(); win.show()
     sys.exit(app.exec())
 

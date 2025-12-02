@@ -1,15 +1,16 @@
 import sqlite3
 from pathlib import Path
 
-DB_PATH = Path("res_stack_recorder.db")
+from core import paths
 
 def migrate():
-    if not DB_PATH.exists():
+    db_path = paths.get_db_path()
+    if not db_path.exists():
         print("Database not found.")
         return
 
     print("Starting migration...")
-    with sqlite3.connect(DB_PATH) as con:
+    with sqlite3.connect(db_path) as con:
         cur = con.cursor()
         
         # 1. Rename existing table

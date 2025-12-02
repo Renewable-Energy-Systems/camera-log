@@ -7,7 +7,8 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QFormLayout, QLineE
                                QFrame, QProgressDialog, QGridLayout, QScrollArea, QSizePolicy, QStyle)
 from PySide6.QtGui import QPixmap, QIcon
 from core.db import execute
-from core.paths import VIDEOS_DIR, ASSETS_DIR
+import core.paths as paths
+from core.paths import ASSETS_DIR
 from services.media import copy_video_into_library
 from services.video_processor import process_and_save_video
 
@@ -220,7 +221,7 @@ class RecordNewView(QFrame):
 
         # Define destination
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        dst = VIDEOS_DIR / f"{ts}_{src.name}"
+        dst = paths.get_videos_dir() / f"{ts}_{src.name}"
         
         # Prepare data for overlay
         data = (
