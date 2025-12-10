@@ -224,7 +224,7 @@ class RecordNewView(QFrame):
 
         # Define destination
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        dst = paths.get_videos_dir() / f"{ts}_{src.name}"
+        dst = paths.get_videos_dir() / f"{ts}_{src.stem}.mp4"
         
         # Prepare data for overlay
         data = (

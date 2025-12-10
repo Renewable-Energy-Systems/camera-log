@@ -80,9 +80,18 @@ def process_and_save_video(input_path: str, output_path: str, data: tuple, progr
     """
     Reads video, resizes if needed, burns overlay, and saves compressed.
     """
-    clip = VideoFileClip(input_path)
     
     # 1. Resize if too large (e.g. 4K) to save time/space
+    try:
+        clip = VideoFileClip(input_path)
+    except Exception as e:
+        if "moov atom not found" in str(e) or "Invalid data found" in str(e):
+            raise ValueError(f"The video file appears to be corrupted or incomplete.\n"
+                             f"If this is in OneDrive/Dropbox, ensure it is fully downloaded.\n"
+                             f"Try copying the file to a local folder (e.g. Desktop) and try again.\n\n"
+                             f"Details: {e}")
+        raise e
+    
     # Downscale to 1080p width if larger, maintaining aspect ratio
     if clip.w > 1920:
         clip = clip.resized(width=1920)
@@ -102,16 +111,32 @@ def process_and_save_video(input_path: str, output_path: str, data: tuple, progr
     my_logger = EncodeLogger(progress_callback) if progress_callback else None
 
     # Write
-    # Using libx264 with crf=28 (high compression) and preset='faster' (speed)
-    # This balances size and processing time well.
-    final.write_videofile(
-        output_path, 
-        codec='libx264', 
-        audio_codec='aac', 
-        preset='faster',
-        ffmpeg_params=['-crf', '28'],
-        logger=my_logger
-    )
+    # Attempt 1: Try NVIDIA GPU (h264_nvenc)
+    # Fast, efficient, uses hardware.
+    try:
+        final.write_videofile(
+            output_path, 
+            codec='h264_nvenc', 
+            audio_codec='aac', 
+            preset='p4', # p1=fastest, p7=slowest (highest quality). p4 is medium/balanced.
+            ffmpeg_params=['-rc:v', 'vbr', '-cq:v', '28'], # Constant Quality for NVENC
+            logger=my_logger,
+            threads=os.cpu_count() # Threads for audio/muxing
+        )
+    except Exception as gpu_error:
+        print(f"GPU Encoding failed, falling back to CPU: {gpu_error}")
+        
+        # Attempt 2: Fallback to CPU (libx264)
+        # Using preset='veryfast' for speed and max threads
+        final.write_videofile(
+            output_path, 
+            codec='libx264', 
+            audio_codec='aac', 
+            preset='veryfast',
+            ffmpeg_params=['-crf', '28'],
+            logger=my_logger,
+            threads=os.cpu_count() or 4 # Use all cores
+        )
     
     clip.close()
     final.close()
