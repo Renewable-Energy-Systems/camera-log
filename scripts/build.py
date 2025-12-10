@@ -49,7 +49,16 @@ def update_installer(new_v):
     new_content = re.sub(r'(#define MyAppVersion ")(.*?)(")', f'\\g<1>{new_v}\\g<3>', content)
     INSTALLER_FILE.write_text(new_content, encoding="utf-8")
 
+import argparse
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--fast", action="store_true", help="Fast build (low compression)")
+    return parser.parse_args()
+
 def main():
+    args = get_args()
+    
     if not ISCC_PATH.exists():
         fail(f"Inno Setup Compiler not found at {ISCC_PATH}. Please install Inno Setup or update script.")
 
@@ -63,11 +72,20 @@ def main():
     
     # 2. Build App
     print("\n--- Building Executable (PyInstaller) ---")
+    # Clean build only if not fast? Or always? standard is usually fine.
+    # We can add --noconfirm.
     run_cmd(["python", "-m", "PyInstaller", "build.spec", "--noconfirm"])
     
     # 3. Compile Installer
-    print("\n--- Compiling Installer (Inno Setup) ---")
-    run_cmd([str(ISCC_PATH), "installer.iss"])
+    print(f"\n--- Compiling Installer (Inno Setup) {'[FAST MODE]' if args.fast else ''} ---")
+    
+    iscc_cmd = [str(ISCC_PATH)]
+    if args.fast:
+        # Use zip and no solid compression for speed
+        iscc_cmd.extend(["/DMyCompression=zip", "/DMySolid=no"])
+    
+    iscc_cmd.append("installer.iss")
+    run_cmd(iscc_cmd)
     
     print("\n[SUCCESS] Build process completed!")
     print(f"New Version: {new_v}")

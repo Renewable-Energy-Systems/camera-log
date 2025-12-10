@@ -2,6 +2,9 @@
 from PySide6.QtWidgets import QApplication
 
 # Material 3 "Deep Blue" Palette
+H1 = "font-size: 24px; font-weight: bold; color: #1a1a1a; margin-bottom: 10px;"
+BODY = "font-size: 14px; color: #1b1b1f;"
+
 COLORS = {
     "primary": "#3448A3",           # Deeper, more vibrant blue
     "onPrimary": "#FFFFFF",

@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "RES Stack Recorder"
-#define MyAppVersion "1.0.5"
+#define MyAppVersion "1.0.8"
 #define MyAppPublisher "Pranay Kiran"
 #define MyAppExeName "RES_Stack_Recorder.exe"
 
@@ -19,8 +19,15 @@ DisableProgramGroupPage=yes
 ; Remove the following line to run in administrative install mode (install for all users.)
 PrivilegesRequired=lowest
 OutputBaseFilename=RES_Stack_Recorder_Setup
-Compression=lzma
-SolidCompression=yes
+#ifndef MyCompression
+  #define MyCompression "lzma"
+#endif
+#ifndef MySolid
+  #define MySolid "yes"
+#endif
+
+Compression={#MyCompression}
+SolidCompression={#MySolid}
 WizardStyle=modern
 CloseApplications=yes
 RestartApplications=no
