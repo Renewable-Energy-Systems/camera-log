@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "RES Stack Recorder"
-#define MyAppVersion "1.0.1"
+#define MyAppVersion "1.0.4"
 #define MyAppPublisher "Pranay Kiran"
 #define MyAppExeName "RES_Stack_Recorder.exe"
 
@@ -24,6 +24,7 @@ SolidCompression=yes
 WizardStyle=modern
 CloseApplications=yes
 RestartApplications=no
+DisableDirPage=auto
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
