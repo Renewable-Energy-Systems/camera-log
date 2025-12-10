@@ -76,67 +76,112 @@ class EncodeLogger(ProgressBarLogger):
                 
             self._progress_cb(int(progress), eta_str)
 
+import subprocess
+import re
+from imageio_ffmpeg import get_ffmpeg_exe
+
+def get_video_metadata(path):
+    clip = VideoFileClip(path)
+    w, h = clip.w, clip.h
+    duration = clip.duration
+    clip.close()
+    return w, h, duration
+
 def process_and_save_video(input_path: str, output_path: str, data: tuple, progress_callback=None):
     """
-    Reads video, resizes if needed, burns overlay, and saves compressed.
+    Uses direct FFmpeg command for maximum speed.
+    Bypasses Python-side frame processing.
     """
+    # 1. Get metadata
+    w, h, duration = get_video_metadata(input_path)
     
-    # 1. Resize if too large (e.g. 4K) to save time/space
-    try:
-        clip = VideoFileClip(input_path)
-    except Exception as e:
-        if "moov atom not found" in str(e) or "Invalid data found" in str(e):
-            raise ValueError(f"The video file appears to be corrupted or incomplete.\n"
-                             f"If this is in OneDrive/Dropbox, ensure it is fully downloaded.\n"
-                             f"Try copying the file to a local folder (e.g. Desktop) and try again.\n\n"
-                             f"Details: {e}")
-        raise e
+    # 2. Calculate target size (limit to 1080p width)
+    target_w = w
+    target_h = h
+    if w > 1920:
+        ratio = 1920 / w
+        target_w = 1920
+        target_h = int(h * ratio)
+        # Ensure even dimensions for encoding
+        if target_h % 2 != 0: target_h -= 1
     
-    # Downscale to 1080p width if larger, maintaining aspect ratio
-    if clip.w > 1920:
-        clip = clip.resized(width=1920)
+    # 3. Create overlay image at TARGET size
+    overlay_img = create_overlay_image((target_w, target_h), data)
     
-    # Create overlay image matching (possibly resized) video size
-    overlay_img = create_overlay_image(clip.size, data)
-    
-    # Create ImageClip
-    overlay_clip = (ImageClip(np.array(overlay_img))
-                   .with_duration(clip.duration)
-                   .with_position(("left", "bottom")))
-    
-    # Composite
-    final = CompositeVideoClip([clip, overlay_clip])
-    
-    # Logger
-    my_logger = EncodeLogger(progress_callback) if progress_callback else None
-
-    # Write
-    # Attempt 1: Try NVIDIA GPU (h264_nvenc)
-    # Fast, efficient, uses hardware.
-    try:
-        final.write_videofile(
-            output_path, 
-            codec='h264_nvenc', 
-            audio_codec='aac', 
-            preset='p4', # p1=fastest, p7=slowest (highest quality). p4 is medium/balanced.
-            ffmpeg_params=['-rc:v', 'vbr', '-cq:v', '28'], # Constant Quality for NVENC
-            logger=my_logger,
-            threads=os.cpu_count() # Threads for audio/muxing
-        )
-    except Exception as gpu_error:
-        print(f"GPU Encoding failed, falling back to CPU: {gpu_error}")
+    # Save overlay to temp file
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tf:
+        overlay_img.save(tf, format="PNG")
+        overlay_path = tf.name
         
-        # Attempt 2: Fallback to CPU (libx264)
-        # Using preset='veryfast' for speed and max threads
-        final.write_videofile(
-            output_path, 
-            codec='libx264', 
-            audio_codec='aac', 
-            preset='veryfast',
-            ffmpeg_params=['-crf', '28'],
-            logger=my_logger,
-            threads=os.cpu_count() or 4 # Use all cores
-        )
+    ffmpeg_exe = get_ffmpeg_exe()
     
-    clip.close()
-    final.close()
+    # 4. Construct FFmpeg command
+    # Filter: Scale input -> Overlay PNG on top
+    # Note: We must scale input video to match the overlay size we just created
+    filter_complex = f"[0:v]scale={target_w}:{target_h}[bg];[bg][1:v]overlay=0:0"
+    
+    # Common args
+    cmd_base = [
+        ffmpeg_exe, '-y',
+        '-i', input_path,
+        '-i', overlay_path,
+        '-filter_complex', filter_complex,
+        '-c:a', 'aac'
+    ]
+    
+    # Encoder args (Try NVENC first)
+    # Using 'g' (GoP size) optimization often helps seeking/speed too
+    nvenc_args = ['-c:v', 'h264_nvenc', '-preset', 'p4', '-rc:v', 'vbr', '-cq:v', '28']
+    cpu_args = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '28', '-threads', str(os.cpu_count() or 4)]
+    
+    def run_ffmpeg(args):
+        # Merge base + encoder + output
+        full_cmd = cmd_base + args + [output_path]
+        
+        process = subprocess.Popen(
+            full_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True, # text mode
+            encoding='utf-8',
+            errors='replace' 
+        )
+        
+        # Parse progress from stderr
+        # Duration format in stderr: Duration: 00:00:30.50
+        # Progress format: time=00:00:15.20
+        
+        while True:
+            line = process.stderr.readline()
+            if not line and process.poll() is not None:
+                break
+                
+            if line and progress_callback:
+                # Naive parsing
+                if "time=" in line:
+                    # extract time
+                    match = re.search(r"time=(\d{2}):(\d{2}):(\d{2}\.\d{2})", line)
+                    if match:
+                        h_val, m_val, s_val = map(float, match.groups())
+                        current_seconds = h_val*3600 + m_val*60 + s_val
+                        percent = min(100, int((current_seconds / duration) * 100))
+                        
+                        # ETA calculation is tricky without stored start time in this scope
+                        # Simpler: just show percent and 'Processing...'
+                        # Or pass simple "..." as ETA for now
+                        progress_callback(percent, "...")
+
+        if process.returncode != 0:
+            raise Exception("FFmpeg failed")
+
+    try:
+        try:
+            run_ffmpeg(nvenc_args)
+        except Exception as e:
+            print(f"NVENC failed ({e}), falling back to CPU...")
+            run_ffmpeg(cpu_args)
+    finally:
+        # Cleanup temp overlay
+        if os.path.exists(overlay_path):
+            os.remove(overlay_path)
