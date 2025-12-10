@@ -4,6 +4,7 @@ from PySide6.QtCore import QSettings
 
 ORG = "RES"
 APP = "StackAssemblyDashboard"
+VERSION = "1.0"
 
 def _s():
     st = QSettings(ORG, APP)

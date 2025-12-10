@@ -61,6 +61,29 @@ class MainWindow(QMainWindow):
         # Global search routes to list
         self.topbar.searchEdit.textChanged.connect(self._global_search)
 
+        # Check for updates
+        from core.settings import VERSION
+        from core.updater import UpdateChecker, open_update_url
+        from PySide6.QtWidgets import QMessageBox
+
+        self.updater = UpdateChecker(VERSION)
+        self.updater.update_available.connect(lambda v, url: self._show_update_dialog(v, url))
+        self.updater.start()
+
+    def _show_update_dialog(self, version, url):
+        from PySide6.QtWidgets import QMessageBox
+        from core.updater import open_update_url
+        
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Update Available")
+        msg.setText(f"A new version ({version}) is available!")
+        msg.setInformativeText("Would you like to download it now?")
+        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg.setDefaultButton(QMessageBox.Yes)
+        
+        if msg.exec() == QMessageBox.Yes:
+            open_update_url(url)
+
     def _switch(self, idx: int):
         self.stack.setCurrentIndex(idx)
         

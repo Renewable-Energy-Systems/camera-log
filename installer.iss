@@ -2,14 +2,14 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "RES Stack Recorder"
-#define MyAppVersion "1.0"
-#define MyAppPublisher "RES"
+#define MyAppVersion "1.0.1"
+#define MyAppPublisher "Pranay Kiran"
 #define MyAppExeName "RES_Stack_Recorder.exe"
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application. Do not use the same AppId value in installers for other applications.
 ; (To generate a new GUID, click Tools | Generate GUID inside the IDE.)
-AppId={{A1B2C3D4-E5F6-7890-1234-567890ABCDEF}
+AppId={{8A4B6C2D-1E3F-4G5H-9I0J-KLMNOPQRSTUV}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 ;AppVerName={#MyAppName} {#MyAppVersion}
@@ -22,6 +22,8 @@ OutputBaseFilename=RES_Stack_Recorder_Setup
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
+CloseApplications=yes
+RestartApplications=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
