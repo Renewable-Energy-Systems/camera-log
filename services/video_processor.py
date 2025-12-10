@@ -43,29 +43,75 @@ def create_overlay_image(size, data):
         
     return img
 
+from proglog import ProgressBarLogger
+import time
+
+class EncodeLogger(ProgressBarLogger):
+    def __init__(self, callback=None):
+        super().__init__()
+        self._progress_cb = callback
+        self.start_time = None
+
+    def bars_callback(self, bar, attr, value, old_value=None):
+        if not self._progress_cb: return
+        
+        if self.start_time is None:
+            self.start_time = time.time()
+            
+        total = self.bars[bar]['total']
+        if total > 0:
+            progress = (value / total) * 100
+            
+            # Calculate ETA
+            elapsed = time.time() - self.start_time
+            if progress > 0:
+                eta_seconds = (elapsed / progress) * (100 - progress)
+                # Format ETA
+                if eta_seconds < 60:
+                    eta_str = f"{int(eta_seconds)}s"
+                else:
+                    eta_str = f"{int(eta_seconds//60)}m {int(eta_seconds%60)}s"
+            else:
+                eta_str = "..."
+                
+            self._progress_cb(int(progress), eta_str)
+
 def process_and_save_video(input_path: str, output_path: str, data: tuple, progress_callback=None):
     """
-    Reads video from input_path, burns overlay text, saves to output_path.
-    data: (battery_code, battery_no, operator_name)
+    Reads video, resizes if needed, burns overlay, and saves compressed.
     """
     clip = VideoFileClip(input_path)
     
-    # Create overlay image matching video size
+    # 1. Resize if too large (e.g. 4K) to save time/space
+    # Downscale to 1080p width if larger, maintaining aspect ratio
+    if clip.w > 1920:
+        clip = clip.resized(width=1920)
+    
+    # Create overlay image matching (possibly resized) video size
     overlay_img = create_overlay_image(clip.size, data)
     
     # Create ImageClip
-    # set duration to match video
     overlay_clip = (ImageClip(np.array(overlay_img))
                    .with_duration(clip.duration)
-                   .with_position(("left", "bottom"))) # Position is handled in image generation, but explicit pos is good too.
+                   .with_position(("left", "bottom")))
     
     # Composite
     final = CompositeVideoClip([clip, overlay_clip])
     
+    # Logger
+    my_logger = EncodeLogger(progress_callback) if progress_callback else None
+
     # Write
-    # Use 'libx264' for compatibility
-    # logger=None to suppress stdout noise, or 'bar'
-    final.write_videofile(output_path, codec='libx264', audio_codec='aac', logger='bar' if not progress_callback else None)
+    # Using libx264 with crf=28 (high compression) and preset='faster' (speed)
+    # This balances size and processing time well.
+    final.write_videofile(
+        output_path, 
+        codec='libx264', 
+        audio_codec='aac', 
+        preset='faster',
+        ffmpeg_params=['-crf', '28'],
+        logger=my_logger
+    )
     
     clip.close()
     final.close()

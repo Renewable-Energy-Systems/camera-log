@@ -14,6 +14,7 @@ from services.video_processor import process_and_save_video
 
 class VideoSaveWorker(QThread):
     finished = Signal(bool, str)
+    progress = Signal(int, str) # percent, eta
 
     def __init__(self, src, dst, data):
         super().__init__()
@@ -23,7 +24,9 @@ class VideoSaveWorker(QThread):
 
     def run(self):
         try:
-            process_and_save_video(self.src, self.dst, self.data)
+            # Lambda to emit progress signal (accepts **kwargs to ignore 'message' or other unexpected args)
+            cb = lambda p, eta, **kwargs: self.progress.emit(p, eta)
+            process_and_save_video(self.src, self.dst, self.data, progress_callback=cb)
             self.finished.emit(True, self.dst)
         except Exception as e:
             self.finished.emit(False, str(e))
@@ -231,15 +234,22 @@ class RecordNewView(QFrame):
         )
 
         # Progress Dialog
-        self.pd = QProgressDialog("Processing and saving video...", None, 0, 0, self)
+        self.pd = QProgressDialog("Processing video...", "Cancel", 0, 100, self)
         self.pd.setWindowModality(Qt.WindowModal)
         self.pd.setMinimumDuration(0)
+        self.pd.setValue(0)
+        self.pd.setAutoClose(False) # Keep open until finished
         self.pd.show()
 
         # Worker
         self.worker = VideoSaveWorker(str(src), str(dst), data)
+        self.worker.progress.connect(self._on_progress)
         self.worker.finished.connect(lambda s, m: self._on_save_finished(s, m, dst))
         self.worker.start()
+
+    def _on_progress(self, percent, eta):
+        self.pd.setValue(percent)
+        self.pd.setLabelText(f"Processing and compressing video...\nTime remaining: {eta}")
 
     def _on_save_finished(self, success, msg, dst_path):
         self.pd.close()
